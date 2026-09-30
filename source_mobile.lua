@@ -506,6 +506,74 @@ do
 			return Connection
 		end
 
+		Library.PressAt = nil
+		Library.PressMoved = false
+		Library.PressItem = nil
+
+		Library:Connect(UserInputService.InputChanged, function(Input)
+			if not Library.PressAt then
+				return
+			end
+
+			if Input.UserInputType ~= Enum.UserInputType.Touch
+				and Input.UserInputType ~= Enum.UserInputType.MouseMovement then
+				return
+			end
+
+			if (Input.Position - Library.PressAt).Magnitude > 9 then
+				Library.PressMoved = true
+			end
+		end)
+
+		Library.Tap = function(Self, Object, Callback)
+			local Item = Object and (Object.Instance or Object)
+
+			if not (typeof(Item) == "Instance" and Item:IsA("GuiObject")) then
+				return
+			end
+
+			local function Inside(Position)
+				local Corner = Item.AbsolutePosition
+				local Extent = Item.AbsoluteSize
+
+				return Position.X >= Corner.X and Position.X <= Corner.X + Extent.X
+					and Position.Y >= Corner.Y and Position.Y <= Corner.Y + Extent.Y
+			end
+
+			Library:Connect({ Instance = Item }, "InputBegan", function(Input)
+				if Input.UserInputType ~= Enum.UserInputType.Touch
+					and Input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+					return
+				end
+
+				Library.PressAt = Input.Position
+				Library.PressMoved = false
+				Library.PressItem = Item
+
+				Input.Changed:Connect(function()
+					if Input.UserInputState ~= Enum.UserInputState.End then
+						return
+					end
+
+					if Library.PressItem ~= Item then
+						return
+					end
+
+					local Moved = Library.PressMoved
+
+					Library.PressAt = nil
+					Library.PressMoved = false
+					Library.PressItem = nil
+
+					if Moved or not Inside(Input.Position) then
+						return
+					end
+
+					Library:SafeCall(Callback, Input)
+				end)
+			end)
+		end
+
 		Library.Tween = function(Self, Properties, Info, IsRawItem)
 			local Object = Self.Instance or IsRawItem
 			Info = Info or TweenInfo.new(Library.Animation.Time, Enum.EasingStyle[Library.Animation.Style], Enum.EasingDirection[Library.Animation.Direction])
@@ -1366,13 +1434,20 @@ do
 				return
 			end
 
-			local Thickness = Params.Thickness or 2
+			local Thickness = Params.Thickness or (IsMobile and 5 or 2)
 			local Right = Params.Right or 4
 			local Top = Params.Top or 30
 			local Bottom = Params.Bottom or 0
 			local Layer = Params.ZIndex or 3
 
+			local HitWidth = math.max(Thickness + 6, IsMobile and 24 or 12)
+			local MinBar = math.max(tonumber(Params.MinBar) or 0, IsMobile and 34 or 16)
+
 			Target.ScrollBarThickness = 0
+
+			pcall(function()
+				Target.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
+			end)
 
 			local TrackFrame
 
@@ -1387,6 +1462,9 @@ do
 					ZIndex = Layer,
 					Size = UDim2.fromOffset(Thickness, 0)
 				}).Instance
+
+				TrackFrame.BackgroundColor3 = Library.Theme["Outline 4"]
+				TrackFrame.BackgroundTransparency = 0.35
 			end
 
 			local Bar = Library:Create("Frame", {
@@ -1401,16 +1479,90 @@ do
 
 			Library:ScrollbarGradient(Bar)
 
+			pcall(function()
+				Library:Create("UICorner", {
+					Name = "\0",
+					Parent = Bar.Instance,
+					CornerRadius = UDim.new(1, 0)
+				})
+			end)
+
+			local Grab = Library:Create("TextButton", {
+				Name = "\0",
+				Parent = Holder,
+				Text = "",
+				AutoButtonColor = false,
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Visible = false,
+				ZIndex = Layer + 2,
+				Size = UDim2.fromOffset(HitWidth, 0)
+			})
+
 			local Entry = {
 				Scroll = Target,
 				Holder = Holder,
 				Bar = Bar.Instance,
+				Grab = Grab.Instance,
 				Track = TrackFrame,
 				Thickness = Thickness,
+				HitWidth = HitWidth,
+				MinBar = MinBar,
+				BarHeight = 0,
 				Right = Right,
 				Top = Top,
 				Bottom = Bottom
 			}
+
+			local function TrackSpan()
+				return math.max(Target.AbsoluteSize.Y - Bottom, 8)
+			end
+
+			local GrabAt = nil
+
+			Library:Connect(Grab, "InputBegan", function(Input)
+				if Input.UserInputType ~= Enum.UserInputType.Touch
+					and Input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+					return
+				end
+
+				local Range = Target.AbsoluteCanvasSize.Y - Target.AbsoluteSize.Y
+
+				if Range <= 0 then
+					return
+				end
+
+				Library:ClaimDrag()
+
+				GrabAt = {
+					Y = Input.Position.Y,
+					Canvas = Target.CanvasPosition.Y,
+					Range = Range,
+					Span = math.max(TrackSpan() - Entry.BarHeight, 1)
+				}
+			end)
+
+			Library:Connect(UserInputService.InputChanged, function(Input)
+				if not GrabAt then
+					return
+				end
+
+				if Input.UserInputType ~= Enum.UserInputType.Touch
+					and Input.UserInputType ~= Enum.UserInputType.MouseMovement then
+					return
+				end
+
+				local Moved = (Input.Position.Y - GrabAt.Y) * (GrabAt.Range / GrabAt.Span)
+
+				Target.CanvasPosition = Vector2.new(Target.CanvasPosition.X, math.clamp(GrabAt.Canvas + Moved, 0, GrabAt.Range))
+			end)
+
+			Library:Connect(UserInputService.InputEnded, function(Input)
+				if Input.UserInputType == Enum.UserInputType.Touch
+					or Input.UserInputType == Enum.UserInputType.MouseButton1 then
+					GrabAt = nil
+				end
+			end)
 
 			table.insert(Library.Scrollbars, Entry)
 
@@ -1438,6 +1590,10 @@ do
 					pcall(function()
 						Entry.Bar:Destroy()
 
+						if Entry.Grab then
+							Entry.Grab:Destroy()
+						end
+
 						if Entry.Track then
 							Entry.Track:Destroy()
 						end
@@ -1463,6 +1619,10 @@ do
 						Entry.Bar.Visible = false
 						Scroll.ScrollingEnabled = false
 
+						if Entry.Grab then
+							Entry.Grab.Visible = false
+						end
+
 						if Entry.Track then
 							Entry.Track.Visible = false
 						end
@@ -1470,7 +1630,7 @@ do
 						Scroll.ScrollingEnabled = true
 
 						local Track = math.max(View.Y - Entry.Bottom, 8)
-						local MinBar = math.min(16, Track)
+						local MinBar = math.min(Entry.MinBar or 16, Track)
 						local MaxBar = math.max(Track - 6, MinBar)
 						local BarHeight = math.clamp(Track * (View.Y / Canvas.Y), MinBar, MaxBar)
 						local Progress = math.clamp(Scroll.CanvasPosition.Y / Range, 0, 1)
@@ -1481,9 +1641,24 @@ do
 							Entry.Track.Visible = true
 						end
 
+						Entry.BarHeight = BarHeight
+
 						Entry.Bar.Size = UDim2.fromOffset(Entry.Thickness, BarHeight)
 						Entry.Bar.Position = UDim2.new(1, -(Entry.Right + Entry.Thickness), 0, Entry.Top + (Track - BarHeight) * Progress)
 						Entry.Bar.Visible = true
+
+						if Entry.Grab then
+							local Touch = Entry.HitWidth or (Entry.Thickness + 6)
+														local Tall = BarHeight + (IsMobile and 12 or 6)
+
+							Entry.Grab.Size = UDim2.fromOffset(Touch, Tall)
+							Entry.Grab.Position = UDim2.new(
+								1,
+								-(Entry.Right + Entry.Thickness) + (Entry.Thickness - Touch) / 2,
+								0,
+								Entry.Top + (Track - BarHeight) * Progress - (Tall - BarHeight) / 2)
+							Entry.Grab.Visible = true
+						end
 					end
 				end
 			end
@@ -1769,7 +1944,7 @@ do
 				Text = "(?)",
 				TextColor3 = Color3.fromRGB(100, 100, 100),
 				BackgroundTransparency = 1,
-				Position = UDim2.new(0, BaseX or 0, 0, 0),
+				Position = UDim2.new(0, BaseX or 0, 0.5, -8),
 				Size = UDim2.new(0, 0, 0, 16),
 				ZIndex = 4,
 				BorderSizePixel = 0,
@@ -1782,7 +1957,7 @@ do
 			})
 
 			local function Place()
-				Mark.Instance.Position = UDim2.new(0, (BaseX or 0) + Anchor.Instance.AbsoluteSize.X + 4, 0, 0)
+				Mark.Instance.Position = UDim2.new(0, (BaseX or 0) + Anchor.Instance.AbsoluteSize.X + 4, 0.5, -8)
 			end
 
 			Library:Connect(Anchor.Instance:GetPropertyChangedSignal("AbsoluteSize"), Place)
@@ -4769,11 +4944,53 @@ do
 				Color = Library.Theme["Outline 1"]
 			}):AddToTheme({ Color = "Outline 1" })
 
-			Button:MakeDraggable()
+			Button.Instance.ZIndex = 200
+			Button.Instance.Active = true
+			Button.Instance.Selectable = true
 
-			Library:Connect(Button, "Activated", function()
-				Window:SetOpen(not Window.IsOpen)
+			local dragging = false
+			local moved = false
+			local pressAt = nil
+			local origin = nil
+
+			Button.Instance.InputBegan:Connect(function(Input)
+				if Input.UserInputType ~= Enum.UserInputType.Touch
+					and Input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+					return
+				end
+				dragging = true
+				moved = false
+				pressAt = Input.Position
+				origin = Button.Instance.AbsolutePosition
+			end)
+
+			Button.Instance.InputEnded:Connect(function(Input)
+				if Input.UserInputType ~= Enum.UserInputType.Touch
+					and Input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+					return
+				end
+				if not dragging then return end
+				dragging = false
+				if not moved then
+					Window:SetOpen(not Window.IsOpen)
+				end
 				Library:ClampToScreen(Button)
+			end)
+
+			Library:Connect(UserInputService.InputChanged, function(Input)
+				if not dragging or not pressAt or not origin then return end
+				if Input.UserInputType ~= Enum.UserInputType.Touch
+					and Input.UserInputType ~= Enum.UserInputType.MouseMovement then
+					return
+				end
+				local delta = Input.Position - pressAt
+				if math.abs(delta.X) + math.abs(delta.Y) < 16 then return end
+				moved = true
+				local parent = Button.Instance.Parent
+				local base = parent and parent.AbsolutePosition or Vector2.zero
+				Button.Instance.Position = UDim2.fromOffset(
+					origin.X - base.X + delta.X,
+					origin.Y - base.Y + delta.Y)
 			end)
 
 			Library.MobileButton = Button
@@ -5415,11 +5632,13 @@ do
 
 			function Window:SetOpen(Bool)
 				if Debounce then
-					return
+					if os.clock() - (Window.ToggleAt or 0) < 0.35 then
+						return
+					end
 				end
 
 				Debounce = true
-
+				Window.ToggleAt = os.clock()
 				Window.IsOpen = Bool
 
 				if Window.UpdateIcons then
@@ -5593,7 +5812,7 @@ do
 					Parent = Items["LeftColumn"].Instance,
 					PaddingTop = UDim.new(0, 6),
 					PaddingBottom = UDim.new(0, 6),
-					PaddingRight = UDim.new(0, 3),
+					PaddingRight = UDim.new(0, IsMobile and 11 or 3),
 					PaddingLeft = UDim.new(0, 3)
 				})
 
@@ -5644,6 +5863,16 @@ do
 					Padding = UDim.new(0, 8),
 					SortOrder = Enum.SortOrder.LayoutOrder
 				})
+
+				if IsMobile then
+					Library:Scrollbar(Items["LeftColumn"], {
+						Parent = Page.Window.Items["Content"],
+						Top = 8,
+						Right = 3,
+						Bottom = 12,
+						Track = true
+					})
+				end
 
 				Page.ColumnsData[1] = Items["LeftColumn"]
 				Page.ColumnsData[2] = Items["RightColumn"]
@@ -6548,15 +6777,15 @@ do
 					Text = "",
 					AutoButtonColor = false,
 					BackgroundTransparency = 1,
-					Size = UDim2.new(1, 0, 0, 18),
+					Size = UDim2.new(1, 0, 0, IsMobile and 26 or 18),
 					BorderSizePixel = 0
 				})
 
 				Items["Indicator"] = Library:Create("Frame", {
 					Name = "\0",
 					Parent = Items["Toggle"].Instance,
-					Position = UDim2.new(0, 2, 0, 4),
-					Size = UDim2.new(0, 10, 0, 10),
+					Position = UDim2.new(0, IsMobile and 3 or 2, 0, IsMobile and 6 or 4),
+					Size = UDim2.new(0, IsMobile and 14 or 10, 0, IsMobile and 14 or 10),
 					BorderSizePixel = 0,
 					BackgroundColor3 = Library.Theme["Content"]
 				}):AddToTheme({BackgroundColor3 = 'Content'})
@@ -6614,7 +6843,7 @@ do
 					Text = Toggle.Name,
 					Size = UDim2.new(0, 0, 0, 16),
 					BackgroundTransparency = 1,
-					Position = UDim2.new(0, 20, 0, 0),
+					Position = UDim2.new(0, IsMobile and 22 or 20, 0.5, -8),
 					BorderSizePixel = 0,
 					AutomaticSize = Enum.AutomaticSize.X
 				}):AddToTheme({TextColor3 = 'Inactive Text'})
@@ -6893,9 +7122,13 @@ do
 				return setmetatable(Settings, Library)
 			end
 
-			Items["Toggle"]:Connect("MouseButton1Down", function()
+			local Flip = function()
 				Toggle:Set(not Toggle.Value)
-			end)
+			end
+
+			Library:Tap(Items["Toggle"], Flip)
+			Library:Tap(Items["Indicator"], Flip)
+			Library:Tap(Items["Inline"], Flip)
 
 			Toggle:Set(Toggle.Default)
 
