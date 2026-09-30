@@ -525,22 +525,24 @@ do
 			end
 		end)
 
+		local function ConnectTap(Signal, Callback)
+			local Connection = Signal:Connect(Callback)
+
+			if type(Library.Connections) == "table" then
+				table.insert(Library.Connections, Connection)
+			end
+
+			return Connection
+		end
+
 		Library.Tap = function(Self, Object, Callback)
 			local Item = Object and (Object.Instance or Object)
 
-			if not (typeof(Item) == "Instance" and Item:IsA("GuiObject")) then
+			if not (typeof(Item) == "Instance" and Item:IsA("GuiButton")) then
 				return
 			end
 
-			local function Inside(Position)
-				local Corner = Item.AbsolutePosition
-				local Extent = Item.AbsoluteSize
-
-				return Position.X >= Corner.X and Position.X <= Corner.X + Extent.X
-					and Position.Y >= Corner.Y and Position.Y <= Corner.Y + Extent.Y
-			end
-
-			Library:Connect({ Instance = Item }, "InputBegan", function(Input)
+			ConnectTap(Item.InputBegan, function(Input)
 				if Input.UserInputType ~= Enum.UserInputType.Touch
 					and Input.UserInputType ~= Enum.UserInputType.MouseButton1 then
 					return
@@ -549,30 +551,24 @@ do
 				Library.PressAt = Input.Position
 				Library.PressMoved = false
 				Library.PressItem = Item
+			end)
 
-				Input.Changed:Connect(function()
-					if Input.UserInputState ~= Enum.UserInputState.End then
-						return
-					end
+			ConnectTap(Item.Activated, function(Input)
+				local Dragged = Library.PressMoved and Library.PressItem == Item
 
-					if Library.PressItem ~= Item then
-						return
-					end
+				Library.PressAt = nil
+				Library.PressMoved = false
+				Library.PressItem = nil
 
-					local Moved = Library.PressMoved
+				if Dragged then
+					return
+				end
 
-					Library.PressAt = nil
-					Library.PressMoved = false
-					Library.PressItem = nil
-
-					if Moved or not Inside(Input.Position) then
-						return
-					end
-
-					Library:SafeCall(Callback, Input)
-				end)
+				Library:SafeCall(Callback, Input)
 			end)
 		end
+
+		Library.MobileTapFix = true
 
 		Library.Tween = function(Self, Properties, Info, IsRawItem)
 			local Object = Self.Instance or IsRawItem
@@ -6777,18 +6773,18 @@ do
 					Text = "",
 					AutoButtonColor = false,
 					BackgroundTransparency = 1,
-					Size = UDim2.new(1, 0, 0, IsMobile and 26 or 18),
+					Size = UDim2.new(1, 0, 0, IsMobile and 28 or 18),
 					BorderSizePixel = 0
 				})
 
-				Items["Indicator"] = Library:Create("Frame", {
+				Items["Indicator"] = Library:Create("TextButton", {
 					Name = "\0",
 					Parent = Items["Toggle"].Instance,
-					Position = UDim2.new(0, IsMobile and 3 or 2, 0, IsMobile and 6 or 4),
-					Size = UDim2.new(0, IsMobile and 14 or 10, 0, IsMobile and 14 or 10),
+					Position = UDim2.new(0, IsMobile and 4 or 2, 0, IsMobile and 6 or 3),
+					Size = UDim2.new(0, IsMobile and 16 or 12, 0, IsMobile and 16 or 12),
 					BorderSizePixel = 0,
-					BackgroundColor3 = Library.Theme["Content"]
-				}):AddToTheme({BackgroundColor3 = 'Content'})
+					BackgroundColor3 = Library.Theme["Element"]
+				}):AddToTheme({BackgroundColor3 = 'Element'})
 
 				Library:Create("UICorner", {
 					Name = "\0",
@@ -6801,8 +6797,10 @@ do
 					Parent = Items["Indicator"].Instance,
 					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 					LineJoinMode = Enum.LineJoinMode.Miter,
-					Color = Library.Theme["Outline 1"]
-				}):AddToTheme({Color = 'Outline 1'})
+					Thickness = 1.4,
+					Transparency = 0.25,
+					Color = Library.Theme["Inactive Text"]
+				}):AddToTheme({Color = 'Inactive Text'})
 
 				Library:Create("UIStroke", {
 					Name = "\0",
@@ -6822,6 +6820,12 @@ do
 					BorderSizePixel = 0,
 					BackgroundColor3 = Library.Theme["Accent"]
 				}):AddToTheme({BackgroundColor3 = 'Accent'})
+
+				Library:Create("UICorner", {
+					Name = "\0",
+					Parent = Items["Inline"].Instance,
+					CornerRadius = UDim.new(0, 3)
+				})
 
 				Library:Create("UIGradient", {
 					Name = "\0",
@@ -6843,7 +6847,7 @@ do
 					Text = Toggle.Name,
 					Size = UDim2.new(0, 0, 0, 16),
 					BackgroundTransparency = 1,
-					Position = UDim2.new(0, IsMobile and 22 or 20, 0.5, -8),
+					Position = UDim2.new(0, IsMobile and 26 or 20, 0.5, -8),
 					BorderSizePixel = 0,
 					AutomaticSize = Enum.AutomaticSize.X
 				}):AddToTheme({TextColor3 = 'Inactive Text'})
@@ -6876,14 +6880,14 @@ do
 				Items["Toggle"]:OnHover(function()
 					Items["Indicator"]:Tween({BackgroundColor3 = Library.Theme["Hovered Element"]})
 				end, function()
-					Items["Indicator"]:Tween({BackgroundColor3 = Library.Theme["Content"]})
+					Items["Indicator"]:Tween({BackgroundColor3 = Library.Theme["Element"]})
 				end)
 
 				Toggle.Items = Items
 			end
 
 			if Toggle.Tooltip then
-				Library:TooltipMark(Items["Toggle"], Items["Text"], Toggle.Tooltip, Toggle.Name, 20)
+				Library:TooltipMark(Items["Toggle"], Items["Text"], Toggle.Tooltip, Toggle.Name, IsMobile and 26 or 20)
 			end
 
 			function Toggle:Set(Bool)
@@ -7128,7 +7132,6 @@ do
 
 			Library:Tap(Items["Toggle"], Flip)
 			Library:Tap(Items["Indicator"], Flip)
-			Library:Tap(Items["Inline"], Flip)
 
 			Toggle:Set(Toggle.Default)
 
