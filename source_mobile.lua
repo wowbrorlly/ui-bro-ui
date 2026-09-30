@@ -4681,9 +4681,12 @@ do
 		-- how much a window of this size has to shrink to sit inside the viewport
 		Library.FitFactor = function(Self, Width, Height)
 			local Viewport = Library:ScreenSize()
-			local Fit = math.min((Viewport.X - 20) / Width, (Viewport.Y - 40) / Height)
+			local Top = Library.SafeTop and Library:SafeTop() or 0
+			local Fit = math.min(
+				(Viewport.X - (IsMobile and 8 or 20)) / math.max(Width, 1),
+				(Viewport.Y - Top - (IsMobile and 12 or 40)) / math.max(Height, 1))
 
-			return math.clamp(Fit, 0.5, 1)
+			return math.clamp(Fit, IsMobile and 0.72 or 0.5, 1)
 		end
 
 		-- keeps a dragged or reopened frame inside the screen and below the topbar
@@ -4724,7 +4727,7 @@ do
 			local Scale = Main.Instance:FindFirstChild("GluMobileScale")
 
 			if Scale then
-				Scale.Scale = Library:FitFactor(485, 520)
+				Scale.Scale = Library:FitFactor(Window.FrameW or 485, Window.FrameH or 520)
 			end
 
 			Library:ClampToScreen(Main)
@@ -4741,8 +4744,8 @@ do
 			local Button = Library:Create("TextButton", {
 				Name = "GluMobileToggle",
 				Parent = Library.Holder.Instance,
-				Size = UDim2.fromOffset(IsMobile and 56 or 46, IsMobile and 56 or 46),
-				Position = UDim2.new(0, 12, 0.5, -28),
+				Size = UDim2.fromOffset(IsMobile and 68 or 46, IsMobile and 68 or 46),
+				Position = UDim2.new(0, 10, 0.42, 0),
 				BackgroundColor3 = Library.Theme["Accent"],
 				BackgroundTransparency = 0.08,
 				BorderSizePixel = 0,
@@ -4751,7 +4754,7 @@ do
 			})
 
 			Button.Instance.Text = "GLU"
-			Button.Instance.TextSize = IsMobile and 16 or 14
+			Button.Instance.TextSize = IsMobile and 18 or 14
 			Button.Instance.TextColor3 = Color3.fromRGB(255, 255, 255)
 			pcall(function() Button.Instance.FontFace = Library.BoldFont end)
 
@@ -4770,6 +4773,7 @@ do
 
 			Library:Connect(Button, "Activated", function()
 				Window:SetOpen(not Window.IsOpen)
+				Library:ClampToScreen(Button)
 			end)
 
 			Library.MobileButton = Button
@@ -4787,13 +4791,23 @@ do
 				Items = { }
 			}
 
+			local FrameW, FrameH = 485, 520
+			if IsMobile then
+				local Viewport = Library:ScreenSize()
+				local Top = Library.SafeTop and Library:SafeTop() or 0
+				FrameW = math.clamp(math.floor(Viewport.X - 8), 280, 560)
+				FrameH = math.clamp(math.floor(Viewport.Y - Top - 8), 320, 760)
+			end
+			Window.FrameW = FrameW
+			Window.FrameH = FrameH
+
 			local Items = { } do
 				Items["MainFrame"] = Library:Create("Frame", {
 					Name = "\0",
 					Parent = Library.Holder.Instance,
 					AnchorPoint = Vector2.new(0.5, 0.5),
 					Position = UDim2.new(0.5, 0, 0.5, 0),
-					Size = UDim2.new(0, 485, 0, 520),
+					Size = UDim2.fromOffset(FrameW, FrameH),
 					BorderSizePixel = 0,
 					BackgroundColor3 = Library.Theme["Background"]
 				}):AddToTheme({BackgroundColor3 = 'Background'})
@@ -4805,7 +4819,7 @@ do
 					Library:Create("UIScale", {
 						Parent = Items["MainFrame"].Instance,
 						Name = "GluMobileScale",
-						Scale = Library:FitFactor(485, 520)
+						Scale = Library:FitFactor(FrameW, FrameH)
 					})
 				end
 
@@ -4868,28 +4882,44 @@ do
 
 				Library:AccentGradient(Items["AccentLine"], 0)
 
-				Items["Pages"] = Library:Create("Frame", {
-					Name = "\0",
-					Parent = Items["MainFrame"].Instance,
-					BackgroundTransparency = 1,
-					Position = UDim2.new(0, 6, 0, 33),
-					Size = UDim2.new(1, -12, 0, 22),
-					BorderSizePixel = 0
-				})
+				if IsMobile then
+					Items["Pages"] = Library:Create("ScrollingFrame", {
+						Name = "\0",
+						Parent = Items["MainFrame"].Instance,
+						BackgroundTransparency = 1,
+						Position = UDim2.new(0, 6, 0, 38),
+						Size = UDim2.new(1, -12, 0, 44),
+						BorderSizePixel = 0,
+						CanvasSize = UDim2.new(0, 0, 0, 0),
+						AutomaticCanvasSize = Enum.AutomaticSize.X,
+						ScrollBarThickness = 0,
+						ScrollingDirection = Enum.ScrollingDirection.X,
+						Active = true
+					})
+				else
+					Items["Pages"] = Library:Create("Frame", {
+						Name = "\0",
+						Parent = Items["MainFrame"].Instance,
+						BackgroundTransparency = 1,
+						Position = UDim2.new(0, 6, 0, 33),
+						Size = UDim2.new(1, -12, 0, 22),
+						BorderSizePixel = 0
+					})
+				end
 
 				Library:Create("UIListLayout", {
 					Name = "\0",
 					Parent = Items["Pages"].Instance,
 					FillDirection = Enum.FillDirection.Horizontal,
-					Padding = UDim.new(0, 0),
+					Padding = UDim.new(0, IsMobile and 6 or 0),
 					SortOrder = Enum.SortOrder.LayoutOrder
 				})
 
 				Items["Content"] = Library:Create("Frame", {
 					Name = "\0",
 					Parent = Items["MainFrame"].Instance,
-					Position = UDim2.new(0, 8, 0, 58),
-					Size = UDim2.new(1, -16, 1, -66),
+					Position = UDim2.new(0, 8, 0, IsMobile and 88 or 58),
+					Size = UDim2.new(1, -16, 1, IsMobile and -98 or -66),
 					BorderSizePixel = 0,
 					BackgroundColor3 = Library.Theme["Content"]
 				}):AddToTheme({BackgroundColor3 = 'Content'})
@@ -4934,7 +4964,7 @@ do
 					Parent = Items["MainFrame"].Instance,
 					BorderSizePixel = 0,
 					Position = UDim2.new(0, 0, 0, 1),
-					Size = UDim2.new(1, 0, 0, 29),
+					Size = UDim2.new(1, 0, 0, IsMobile and 34 or 29),
 					ZIndex = 2,
 					BackgroundColor3 = Library.Theme["Inline"]
 				}):AddToTheme({BackgroundColor3 = 'Inline'})
@@ -5475,8 +5505,8 @@ do
 				Library:Create("UIPadding", {
 					Name = "\0",
 					Parent = Items["Inactive"].Instance,
-					PaddingRight = UDim.new(0, 7),
-					PaddingLeft = UDim.new(0, 7)
+					PaddingRight = UDim.new(0, IsMobile and 14 or 7),
+					PaddingLeft = UDim.new(0, IsMobile and 14 or 7)
 				})
 
 				Items["Shade"] = Library:Create("UIGradient", {
@@ -5551,7 +5581,7 @@ do
 					ScrollBarImageColor3 = Library.Theme["Accent"],
 					Active = true,
 					AutomaticCanvasSize = Enum.AutomaticSize.Y,
-					ScrollBarThickness = 0,
+					ScrollBarThickness = IsMobile and 5 or 0,
 					BackgroundTransparency = 1,
 					Size = UDim2.new(1, 0, 1, 0),
 					BorderSizePixel = 0,
@@ -5574,18 +5604,30 @@ do
 					SortOrder = Enum.SortOrder.LayoutOrder
 				})
 
-				Items["RightColumn"] = Library:Create("ScrollingFrame", {
-					Name = "\0",
-					Parent = Items["Page"].Instance,
-					ScrollBarImageColor3 = Library.Theme["Accent"],
-					Active = true,
-					AutomaticCanvasSize = Enum.AutomaticSize.Y,
-					ScrollBarThickness = 0,
-					BackgroundTransparency = 1,
-					Size = UDim2.new(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					CanvasSize = UDim2.new(0, 0, 0, 0)
-				}):AddToTheme({ScrollBarImageColor3 = 'Accent'})
+				if IsMobile then
+					Items["RightColumn"] = Library:Create("Frame", {
+						Name = "\0",
+						Parent = Items["LeftColumn"].Instance,
+						BackgroundTransparency = 1,
+						AutomaticSize = Enum.AutomaticSize.Y,
+						Size = UDim2.new(1, 0, 0, 0),
+						BorderSizePixel = 0,
+						LayoutOrder = 100
+					})
+				else
+					Items["RightColumn"] = Library:Create("ScrollingFrame", {
+						Name = "\0",
+						Parent = Items["Page"].Instance,
+						ScrollBarImageColor3 = Library.Theme["Accent"],
+						Active = true,
+						AutomaticCanvasSize = Enum.AutomaticSize.Y,
+						ScrollBarThickness = 0,
+						BackgroundTransparency = 1,
+						Size = UDim2.new(1, 0, 1, 0),
+						BorderSizePixel = 0,
+						CanvasSize = UDim2.new(0, 0, 0, 0)
+					}):AddToTheme({ScrollBarImageColor3 = 'Accent'})
+				end
 
 				Library:Create("UIPadding", {
 					Name = "\0",
@@ -5639,7 +5681,12 @@ do
 						}
 					end
 
-					Old.Items["Inactive"].Instance.Size = UDim2.new(1 / math.max(#Page.Window.Pages, 1), 0, 1, 0)
+					Old.Items["Inactive"].Instance.Size = IsMobile
+						and UDim2.new(0, 0, 1, 0)
+						or UDim2.new(1 / math.max(#Page.Window.Pages, 1), 0, 1, 0)
+					if IsMobile then
+						Old.Items["Inactive"].Instance.AutomaticSize = Enum.AutomaticSize.X
+					end
 					Old.Items["Text"].Instance.Position = UDim2.new(0.5, 0, 0.5, 0)
 
 					Old.Items["Page"]:FadeDescendants(false, function()
@@ -5666,7 +5713,12 @@ do
 					}
 				end
 
-				Items["Inactive"].Instance.Size = UDim2.new(1 / math.max(#Page.Window.Pages, 1), 0, 1, 0)
+				Items["Inactive"].Instance.Size = IsMobile
+					and UDim2.new(0, 0, 1, 0)
+					or UDim2.new(1 / math.max(#Page.Window.Pages, 1), 0, 1, 0)
+				if IsMobile then
+					Items["Inactive"].Instance.AutomaticSize = Enum.AutomaticSize.X
+				end
 				Items["Text"].Instance.Position = UDim2.new(0.5, 0, 0.5, 0)
 
 				Page.Window.Current = Page
@@ -5684,8 +5736,13 @@ do
 
 			local PageCount = #Page.Window.Pages
 			for _, ExistingPage in Page.Window.Pages do
-				ExistingPage.Items["Inactive"].Instance.AutomaticSize = Enum.AutomaticSize.None
-				ExistingPage.Items["Inactive"].Instance.Size = UDim2.new(1 / PageCount, 0, 1, 0)
+				if IsMobile then
+					ExistingPage.Items["Inactive"].Instance.AutomaticSize = Enum.AutomaticSize.X
+					ExistingPage.Items["Inactive"].Instance.Size = UDim2.new(0, 0, 1, 0)
+				else
+					ExistingPage.Items["Inactive"].Instance.AutomaticSize = Enum.AutomaticSize.None
+					ExistingPage.Items["Inactive"].Instance.Size = UDim2.new(1 / PageCount, 0, 1, 0)
+				end
 			end
 
 			return setmetatable(Page, Library)
