@@ -889,6 +889,85 @@ end;
 
 NeverLose.IsStudio = RunService:IsStudio();
 NeverLose.IsMobile = UserInputService.TouchEnabled;
+NeverLose.TouchScrollInput = nil;
+NeverLose.ClaimedTouch = nil;
+
+function NeverLose:ClaimTouch(Input)
+	if Input then
+		NeverLose.ClaimedTouch = Input;
+	end;
+end;
+
+function NeverLose:EnableTouchScroll(Frame)
+	if not Frame or not NeverLose.IsMobile or type(Frame) ~= "Instance" then
+		return;
+	end;
+
+	local Gesture = nil;
+
+	NeverLose:AddSignal(Frame.InputBegan:Connect(LPH_NO_VIRTUALIZE(function(Input)
+		if Input.UserInputType ~= Enum.UserInputType.Touch then
+			return;
+		end;
+
+		if NeverLose.TouchScrollInput then
+			return;
+		end;
+
+		local Pending = Input;
+
+		-- let every control finish its own InputBegan first so a slider can claim the touch
+		task.defer(function()
+			if NeverLose.ClaimedTouch == Pending or NeverLose.TouchScrollInput then
+				return;
+			end;
+
+			NeverLose.TouchScrollInput = Pending;
+			Gesture = {
+				Start  = Pending.Position,
+				Canvas = Frame.CanvasPosition,
+			};
+
+			local EndSignal;
+			EndSignal = Pending.Changed:Connect(function()
+				if Pending.UserInputState == Enum.UserInputState.End then
+					NeverLose.TouchScrollInput = nil;
+					NeverLose.ClaimedTouch = nil;
+					Gesture = nil;
+					EndSignal:Disconnect();
+				end;
+			end);
+		end);
+	end)));
+
+	NeverLose:AddSignal(UserInputService.InputChanged:Connect(LPH_NO_VIRTUALIZE(function(Input)
+		if not Gesture or Input.UserInputType ~= Enum.UserInputType.Touch then
+			return;
+		end;
+
+		if Input ~= NeverLose.TouchScrollInput then
+			return;
+		end;
+
+		local MaxY = math.max(0, Frame.AbsoluteCanvasSize.Y - Frame.AbsoluteSize.Y);
+
+		if MaxY <= 0 then
+			return;
+		end;
+
+		local Y = math.clamp(Gesture.Canvas.Y - (Input.Position.Y - Gesture.Start.Y), 0, MaxY);
+
+		Frame.CanvasPosition = Vector2.new(Frame.CanvasPosition.X, Y);
+	end)));
+
+	NeverLose:AddSignal(UserInputService.InputEnded:Connect(function(Input)
+		if Input.UserInputType == Enum.UserInputType.Touch then
+			NeverLose.TouchScrollInput = nil;
+			NeverLose.ClaimedTouch = nil;
+			Gesture = nil;
+		end;
+	end));
+end;
 
 NeverLose.CreateInput = LPH_NO_VIRTUALIZE(function(self , Frame , Callback)
 	local Button = Instance.new('ImageButton',Frame);
@@ -2105,6 +2184,7 @@ function NeverLose:RegisiterHandler(Handler: Frame , Signal)
 		do
 			SlideMain.InputBegan:Connect(LPH_NO_VIRTUALIZE(function(Input)
 				if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+					NeverLose:ClaimTouch(Input);
 					IsHold = true
 					Update(Input)
 				end
@@ -2848,9 +2928,11 @@ function NeverLose:RegisiterHandler(Handler: Frame , Signal)
 			DropdownScrollFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 			DropdownScrollFrame.Size = UDim2.new(1, -5, 1, -5)
 			DropdownScrollFrame.ZIndex = ZINdex + 127
-			DropdownScrollFrame.ScrollBarThickness = 0
+			DropdownScrollFrame.ScrollBarThickness = NeverLose.IsMobile and 5 or 0
 
 			DropdownLib.RootItem = DropdownScrollFrame;
+
+			NeverLose:EnableTouchScroll(DropdownScrollFrame);
 
 			UIListLayout.Parent = DropdownScrollFrame
 			UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -4237,7 +4319,7 @@ function NeverLose:CreateWindow(Config)
 	LeftScrollingFrame.Position = UDim2.new(0.5, 0, 0, 60)
 	LeftScrollingFrame.Size = UDim2.new(1, -10, 1, -115)
 	LeftScrollingFrame.ZIndex = 7
-	LeftScrollingFrame.ScrollBarThickness = 0
+	LeftScrollingFrame.ScrollBarThickness = NeverLose.IsMobile and 4 or 0
 
 	UIListLayout.Parent = LeftScrollingFrame
 	UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -4247,6 +4329,8 @@ function NeverLose:CreateWindow(Config)
 	NeverLose:AddSignal(UIListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(LPH_NO_VIRTUALIZE(function()
 		LeftScrollingFrame.CanvasSize = UDim2.fromOffset(0,UIListLayout.AbsoluteContentSize.Y + 1)
 	end)))
+
+	NeverLose:EnableTouchScroll(LeftScrollingFrame);
 
 	BottomFrame.Name = NeverLose.RandomString();
 	BottomFrame.Parent = LeftMenuFrame
@@ -4738,7 +4822,7 @@ function NeverLose:CreateWindow(Config)
 		TabButton.BackgroundTransparency = 0.500
 		TabButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		TabButton.BorderSizePixel = 0
-		TabButton.Size = UDim2.new(1, -1, 0, 30)
+		TabButton.Size = UDim2.new(1, -1, 0, NeverLose.IsMobile and 40 or 30)
 		TabButton.ZIndex = 8
 
 		UICorner.CornerRadius = UDim.new(0, 6)
@@ -4833,7 +4917,7 @@ function NeverLose:CreateWindow(Config)
 		UIListLayout_2.SortOrder = Enum.SortOrder.LayoutOrder
 		UIListLayout_2.Padding = UDim.new(0, 5)
 
-		if Config.Type == "Single" then
+		if Config.Type == "Single" or NeverLose.IsMobile then
 			UIListLayout_2:Destroy();
 			RightScroll:Destroy();
 			RightScroll = LeftScroll;
@@ -4841,9 +4925,18 @@ function NeverLose:CreateWindow(Config)
 			LeftScroll.Size = UDim2.new(1, 0, 1, -5);
 			LeftScroll.Position = UDim2.new(0.5, 0, 0.5, 0)
 		else
+			NeverLose:EnableTouchScroll(RightScroll);
 			NeverLose:AddSignal(UIListLayout_2:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(LPH_NO_VIRTUALIZE(function()
 				RightScroll.CanvasSize = UDim2.fromOffset(0,UIListLayout_2.AbsoluteContentSize.Y + 1)
 			end)))
+		end;
+
+		NeverLose:EnableTouchScroll(LeftScroll);
+
+		if NeverLose.IsMobile then
+			LeftScroll.ScrollBarThickness = 5;
+			LeftScroll.ScrollingDirection = Enum.ScrollingDirection.Y;
+			LeftScroll.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable;
 		end;
 
 		NeverLose:AddSignal(TabIcon:GetPropertyChangedSignal('TextTransparency'):Connect(LPH_NO_VIRTUALIZE(function()
