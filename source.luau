@@ -891,6 +891,8 @@ NeverLose.IsStudio = RunService:IsStudio();
 NeverLose.IsMobile = UserInputService.TouchEnabled;
 NeverLose.TouchScrollInput = nil;
 NeverLose.ClaimedTouch = nil;
+NeverLose.ScrollLocked = false;
+NeverLose.TouchScrollFrames = {};
 
 function NeverLose:ClaimTouch(Input)
 	if Input then
@@ -898,75 +900,265 @@ function NeverLose:ClaimTouch(Input)
 	end;
 end;
 
-function NeverLose:EnableTouchScroll(Frame)
-	if not Frame or not NeverLose.IsMobile or type(Frame) ~= "Instance" then
+function NeverLose:InstallTouchScroll()
+	if NeverLose.TouchScrollInstalled or not NeverLose.IsMobile then
 		return;
 	end;
 
+	NeverLose.TouchScrollInstalled = true;
+
 	local Gesture = nil;
 
-	NeverLose:AddSignal(Frame.InputBegan:Connect(LPH_NO_VIRTUALIZE(function(Input)
-		if Input.UserInputType ~= Enum.UserInputType.Touch then
+	local function ScaleOf(Object)
+		local Scale = 1;
+		local Node = Object;
+
+		while Node do
+			local UiScale = Node:FindFirstChildOfClass("UIScale");
+
+			if UiScale and UiScale.Scale > 0 then
+				Scale = Scale * UiScale.Scale;
+			end;
+
+			if Node == NeverLose.ScreenGui then
+				break;
+			end;
+
+			Node = Node.Parent;
+		end;
+
+		if Scale <= 0 then
+			return 1;
+		end;
+
+		return Scale;
+	end;
+
+	local function Visible(Object)
+		local Node = Object;
+
+		while Node and Node ~= NeverLose.ScreenGui do
+			if Node:IsA("GuiObject") and not Node.Visible then
+				return false;
+			end;
+
+			Node = Node.Parent;
+		end;
+
+		return Object ~= nil and Object.Parent ~= nil;
+	end;
+
+	local function Inside(Object, X, Y)
+		local Pos = Object.AbsolutePosition;
+		local Size = Object.AbsoluteSize;
+
+		return Size.X > 0 and Size.Y > 0
+			and X >= Pos.X and X <= Pos.X + Size.X
+			and Y >= Pos.Y and Y <= Pos.Y + Size.Y;
+	end;
+
+	local function MaxScroll(Object)
+		local Layout = Object:FindFirstChildOfClass("UIListLayout");
+
+		if Layout then
+			local Want = math.ceil(Layout.AbsoluteContentSize.Y + 1);
+
+			if Want > 1 and Object.CanvasSize.Y.Offset + 1 < Want then
+				Object.CanvasSize = UDim2.fromOffset(0, Want);
+			end;
+		end;
+
+		local Scale = ScaleOf(Object);
+		local View = Object.AbsoluteSize.Y;
+		local Ok, WindowSize = pcall(function()
+			return Object.AbsoluteWindowSize;
+		end);
+
+		if Ok and typeof(WindowSize) == "Vector2" and WindowSize.Y > 0 then
+			View = WindowSize.Y;
+		end;
+
+		local Canvas = Object.AbsoluteCanvasSize.Y;
+
+		if Layout then
+			local ScaledContent = (Layout.AbsoluteContentSize.Y + 1) * Scale;
+
+			if ScaledContent > Canvas then
+				Canvas = ScaledContent;
+			end;
+		end;
+
+		return math.max(0, (Canvas - View) / Scale);
+	end;
+
+	local function Covered(Scroll, X, Y)
+		local Root = NeverLose.ScreenGui;
+
+		if not Root then
+			return false;
+		end;
+
+		for _, Obj in next, Root:GetChildren() do
+			if Obj:IsA("GuiObject") and Obj.Visible and Obj ~= Scroll and not Scroll:IsDescendantOf(Obj) then
+				if Obj.ZIndex > Scroll.ZIndex and Obj.BackgroundTransparency < 0.9 and Visible(Obj) and Inside(Obj, X, Y) then
+					if Obj.AbsoluteSize.X >= 20 and Obj.AbsoluteSize.Y >= 20 then
+						return true;
+					end;
+				end;
+			end;
+		end;
+
+		return false;
+	end;
+
+	local function PaneAt(X, Y)
+		local Best = nil;
+		local BestArea = nil;
+		local Frames = NeverLose.TouchScrollFrames;
+
+		for Index = #Frames, 1, -1 do
+			local Pane = Frames[Index];
+
+			if not Pane or not Pane.Parent then
+				table.remove(Frames, Index);
+			elseif Visible(Pane) and Inside(Pane, X, Y) and MaxScroll(Pane) > 2 and not Covered(Pane, X, Y) then
+				local Area = Pane.AbsoluteSize.X * Pane.AbsoluteSize.Y;
+
+				if not BestArea or Area < BestArea then
+					Best = Pane;
+					BestArea = Area;
+				end;
+			end;
+		end;
+
+		return Best;
+	end;
+
+	NeverLose:AddSignal(UserInputService.InputBegan:Connect(LPH_NO_VIRTUALIZE(function(Input)
+		if Input.UserInputType ~= Enum.UserInputType.Touch or Gesture then
 			return;
 		end;
 
-		if NeverLose.TouchScrollInput then
+		if NeverLose.ClaimedTouch == Input then
 			return;
 		end;
 
+		local X, Y = Input.Position.X, Input.Position.Y;
 		local Pending = Input;
 
-		-- let every control finish its own InputBegan first so a slider can claim the touch
 		task.defer(function()
-			if NeverLose.ClaimedTouch == Pending or NeverLose.TouchScrollInput then
+			if Gesture or NeverLose.ClaimedTouch == Pending then
 				return;
 			end;
 
-			NeverLose.TouchScrollInput = Pending;
-			Gesture = {
-				Start  = Pending.Position,
-				Canvas = Frame.CanvasPosition,
-			};
+			if Pending.UserInputState == Enum.UserInputState.End then
+				return;
+			end;
 
-			local EndSignal;
-			EndSignal = Pending.Changed:Connect(function()
-				if Pending.UserInputState == Enum.UserInputState.End then
-					NeverLose.TouchScrollInput = nil;
-					NeverLose.ClaimedTouch = nil;
-					Gesture = nil;
-					EndSignal:Disconnect();
-				end;
-			end);
+			local Pane = PaneAt(X, Y);
+
+			if not Pane then
+				return;
+			end;
+
+			Gesture = {
+				Input = Pending,
+				Frame = Pane,
+				StartX = X,
+				StartY = Y,
+				Canvas = Pane.CanvasPosition.Y,
+				Moved = false,
+			};
 		end);
 	end)));
 
 	NeverLose:AddSignal(UserInputService.InputChanged:Connect(LPH_NO_VIRTUALIZE(function(Input)
-		if not Gesture or Input.UserInputType ~= Enum.UserInputType.Touch then
+		if not Gesture or Input ~= Gesture.Input or Input.UserInputType ~= Enum.UserInputType.Touch then
 			return;
 		end;
 
-		if Input ~= NeverLose.TouchScrollInput then
+		if NeverLose.ClaimedTouch == Input then
+			Gesture = nil;
 			return;
 		end;
 
-		local MaxY = math.max(0, Frame.AbsoluteCanvasSize.Y - Frame.AbsoluteSize.Y);
+		local Frame = Gesture.Frame;
 
-		if MaxY <= 0 then
+		if not Frame or not Frame.Parent then
+			Gesture = nil;
 			return;
 		end;
 
-		local Y = math.clamp(Gesture.Canvas.Y - (Input.Position.Y - Gesture.Start.Y), 0, MaxY);
+		local DeltaX = Input.Position.X - Gesture.StartX;
+		local DeltaY = Input.Position.Y - Gesture.StartY;
+
+		if not Gesture.Moved then
+			if math.abs(DeltaX) + math.abs(DeltaY) < 10 then
+				return;
+			end;
+
+			if math.abs(DeltaX) > math.abs(DeltaY) * 1.25 then
+				Gesture = nil;
+				return;
+			end;
+
+			Gesture.Moved = true;
+			NeverLose.ScrollLocked = true;
+			Gesture.Canvas = Frame.CanvasPosition.Y;
+			Gesture.StartY = Input.Position.Y;
+			return;
+		end;
+
+		local Scale = ScaleOf(Frame);
+		local MaxY = MaxScroll(Frame);
+		local Y = math.clamp(Gesture.Canvas - ((Input.Position.Y - Gesture.StartY) / Scale), 0, MaxY);
 
 		Frame.CanvasPosition = Vector2.new(Frame.CanvasPosition.X, Y);
 	end)));
 
 	NeverLose:AddSignal(UserInputService.InputEnded:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.Touch then
-			NeverLose.TouchScrollInput = nil;
-			NeverLose.ClaimedTouch = nil;
-			Gesture = nil;
+		if not Gesture or Input ~= Gesture.Input then
+			return;
+		end;
+
+		local Moved = Gesture.Moved;
+
+		Gesture = nil;
+
+		if Moved then
+			NeverLose.ScrollLocked = true;
+
+			task.delay(0.12, function()
+				if not Gesture then
+					NeverLose.ScrollLocked = false;
+				end;
+			end);
 		end;
 	end));
+end;
+
+function NeverLose:EnableTouchScroll(Frame)
+	if not Frame or not NeverLose.IsMobile or type(Frame) ~= "Instance" or not Frame:IsA("ScrollingFrame") then
+		return;
+	end;
+
+	for _, Pane in next, NeverLose.TouchScrollFrames do
+		if Pane == Frame then
+			return;
+		end;
+	end;
+
+	Frame.Active = true;
+	Frame.ClipsDescendants = true;
+	Frame.ScrollingDirection = Enum.ScrollingDirection.Y;
+	Frame.ElasticBehavior = Enum.ElasticBehavior.Never;
+
+	if Frame.ScrollBarThickness < 4 then
+		Frame.ScrollBarThickness = 4;
+	end;
+
+	table.insert(NeverLose.TouchScrollFrames, Frame);
+	NeverLose:InstallTouchScroll();
 end;
 
 NeverLose.CreateInput = LPH_NO_VIRTUALIZE(function(self , Frame , Callback)
@@ -979,7 +1171,13 @@ NeverLose.CreateInput = LPH_NO_VIRTUALIZE(function(self , Frame , Callback)
 	Button.Image = "rbxasset://textuers/translateIcon.png";
 
 	if Callback then
-		local bth_signal = Button.MouseButton1Click:Connect(Callback);
+		local bth_signal = Button.MouseButton1Click:Connect(function(...)
+			if NeverLose.ScrollLocked then
+				return;
+			end;
+
+			return Callback(...);
+		end);
 
 		return Button , bth_signal;
 	end;
@@ -1685,6 +1883,7 @@ function NeverLose:CreateColorPicker(HandleFrame: Frame)
 
 	NeverLose:AddSignal(ColorPickerHandler.InputBegan:Connect(function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+			NeverLose:ClaimTouch(Input);
 			ColorPickerLib.IsHold = true;
 		end;
 	end));
@@ -1697,6 +1896,7 @@ function NeverLose:CreateColorPicker(HandleFrame: Frame)
 
 	NeverLose:AddSignal(ColorMap.InputBegan:Connect(LPH_NO_VIRTUALIZE(function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+			NeverLose:ClaimTouch(Input);
 			ColorPickerLib.IsHold = true;
 
 			while (UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) or ColorPickerLib.IsHold) do task.wait()
@@ -1713,6 +1913,7 @@ function NeverLose:CreateColorPicker(HandleFrame: Frame)
 
 	NeverLose:AddSignal(SaViMap.InputBegan:Connect(LPH_NO_VIRTUALIZE(function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+			NeverLose:ClaimTouch(Input);
 			ColorPickerLib.IsHold = true;
 
 			while (UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) or ColorPickerLib.IsHold) do task.wait();
@@ -4936,7 +5137,7 @@ function NeverLose:CreateWindow(Config)
 		if NeverLose.IsMobile then
 			LeftScroll.ScrollBarThickness = 5;
 			LeftScroll.ScrollingDirection = Enum.ScrollingDirection.Y;
-			LeftScroll.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable;
+			LeftScroll.ElasticBehavior = Enum.ElasticBehavior.Never;
 		end;
 
 		NeverLose:AddSignal(TabIcon:GetPropertyChangedSignal('TextTransparency'):Connect(LPH_NO_VIRTUALIZE(function()
