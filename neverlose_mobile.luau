@@ -972,8 +972,17 @@ function NeverLose:InstallTouchScroll()
 			Scale = 1;
 		end;
 
-		-- Absolute* sizes carry the UIScale, canvas units do not. Divide it out so
-		-- the pane can reach its last row instead of stopping short.
+		-- Absolute* sizes carry the UIScale, the canvas is authored without it.
+		-- Grow the canvas in canvas units so the final row is really reachable.
+		if Layout then
+			local Want = math.ceil(Layout.AbsoluteContentSize.Y / Scale) + 2;
+
+			if Want > 1 and Object.CanvasSize.Y.Offset + 1 < Want then
+				Object.CanvasSize = UDim2.fromOffset(0, Want);
+			end;
+		end;
+
+		-- Visible height, converted into the same canvas units.
 		local View = Object.AbsoluteSize.Y;
 		local Ok, WindowSize = pcall(function()
 			return Object.AbsoluteWindowSize;
@@ -985,15 +994,12 @@ function NeverLose:InstallTouchScroll()
 
 		View = View / Scale;
 
-		local Canvas = Object.AbsoluteCanvasSize.Y / Scale;
+		-- Read the authored canvas back directly, never the scale-carrying
+		-- AbsoluteCanvasSize, which can shrink the range below the content.
+		local Canvas = Object.CanvasSize.Y.Offset;
 
-		if Layout then
-			local Need = (Layout.AbsoluteContentSize.Y + 1) / Scale;
-
-			if Need > Canvas then
-				Canvas = math.ceil(Need);
-				Object.CanvasSize = UDim2.fromOffset(0, Canvas);
-			end;
+		if Canvas < View then
+			Canvas = View;
 		end;
 
 		return math.max(0, Canvas - View);
@@ -1161,6 +1167,7 @@ function NeverLose:EnableTouchScroll(Frame)
 	Frame.ClipsDescendants = true;
 	Frame.ScrollingDirection = Enum.ScrollingDirection.Y;
 	Frame.ElasticBehavior = Enum.ElasticBehavior.Never;
+	Frame.AutomaticCanvasSize = Enum.AutomaticSize.Y;
 
 	if Frame.ScrollBarThickness < 4 then
 		Frame.ScrollBarThickness = 4;
