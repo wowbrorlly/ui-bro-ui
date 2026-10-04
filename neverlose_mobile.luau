@@ -972,17 +972,29 @@ function NeverLose:InstallTouchScroll()
 			Scale = 1;
 		end;
 
-		-- Absolute* sizes carry the UIScale, the canvas is authored without it.
-		-- Grow the canvas in canvas units so the final row is really reachable.
-		if Layout then
-			local Want = math.ceil(Layout.AbsoluteContentSize.Y / Scale) + 2;
+		-- Canvas height in canvas units (unscaled).
+		-- Priority: UIListLayout content size (always accurate, even when
+		-- AutomaticCanvasSize is managing the authored CanvasSize) > the authored
+		-- CanvasSize offset as a fallback for frames without a layout.
+		local Canvas;
 
-			if Want > 1 and Object.CanvasSize.Y.Offset + 1 < Want then
-				Object.CanvasSize = UDim2.fromOffset(0, Want);
+		if Layout then
+			-- AbsoluteContentSize is in screen pixels; divide by Scale to get canvas units.
+			-- Add a small pad so the last item's bottom edge is never clipped by rounding.
+			Canvas = math.ceil(Layout.AbsoluteContentSize.Y / Scale) + 4;
+
+			-- Keep the authored size in sync so the built-in scrollbar thumb is right,
+			-- but only when AutomaticCanvasSize is off (otherwise Roblox owns it).
+			if Object.AutomaticCanvasSize == Enum.AutomaticSize.None then
+				if Object.CanvasSize.Y.Offset < Canvas then
+					Object.CanvasSize = UDim2.fromOffset(0, Canvas);
+				end;
 			end;
+		else
+			Canvas = Object.CanvasSize.Y.Offset;
 		end;
 
-		-- Visible height, converted into the same canvas units.
+		-- Visible height in canvas units.
 		local View = Object.AbsoluteSize.Y;
 		local Ok, WindowSize = pcall(function()
 			return Object.AbsoluteWindowSize;
@@ -993,14 +1005,6 @@ function NeverLose:InstallTouchScroll()
 		end;
 
 		View = View / Scale;
-
-		-- AbsoluteCanvasSize reflects the true rendered size (including any
-		-- layout-driven growth), so use it instead of the authored offset,
-		-- which can be zero or stale when the layout is still expanding.
-		local AbsCanvas = Object.AbsoluteCanvasSize;
-		local Canvas = (typeof(AbsCanvas) == "Vector2" and AbsCanvas.Y > 0)
-			and (AbsCanvas.Y / Scale)
-			or Object.CanvasSize.Y.Offset;
 
 		if Canvas < View then
 			Canvas = View;
@@ -1171,7 +1175,9 @@ function NeverLose:EnableTouchScroll(Frame)
 	Frame.ClipsDescendants = true;
 	Frame.ScrollingDirection = Enum.ScrollingDirection.Y;
 	Frame.ElasticBehavior = Enum.ElasticBehavior.Never;
-	Frame.AutomaticCanvasSize = Enum.AutomaticSize.None;
+	-- Leave AutomaticCanvasSize as-is: the caller (e.g. gluhub) may have set it
+	-- to Y so Roblox keeps the canvas grown. MaxScroll reads AbsoluteContentSize
+	-- directly, so it works correctly regardless of which mode is active.
 
 	if Frame.ScrollBarThickness < 4 then
 		Frame.ScrollBarThickness = 4;
