@@ -994,9 +994,13 @@ function NeverLose:InstallTouchScroll()
 
 		View = View / Scale;
 
-		-- Read the authored canvas back directly, never the scale-carrying
-		-- AbsoluteCanvasSize, which can shrink the range below the content.
-		local Canvas = Object.CanvasSize.Y.Offset;
+		-- AbsoluteCanvasSize reflects the true rendered size (including any
+		-- layout-driven growth), so use it instead of the authored offset,
+		-- which can be zero or stale when the layout is still expanding.
+		local AbsCanvas = Object.AbsoluteCanvasSize;
+		local Canvas = (typeof(AbsCanvas) == "Vector2" and AbsCanvas.Y > 0)
+			and (AbsCanvas.Y / Scale)
+			or Object.CanvasSize.Y.Offset;
 
 		if Canvas < View then
 			Canvas = View;
@@ -1167,7 +1171,7 @@ function NeverLose:EnableTouchScroll(Frame)
 	Frame.ClipsDescendants = true;
 	Frame.ScrollingDirection = Enum.ScrollingDirection.Y;
 	Frame.ElasticBehavior = Enum.ElasticBehavior.Never;
-	Frame.AutomaticCanvasSize = Enum.AutomaticSize.Y;
+	Frame.AutomaticCanvasSize = Enum.AutomaticSize.None;
 
 	if Frame.ScrollBarThickness < 4 then
 		Frame.ScrollBarThickness = 4;
