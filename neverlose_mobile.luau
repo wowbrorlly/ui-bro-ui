@@ -966,16 +966,14 @@ function NeverLose:InstallTouchScroll()
 
 	local function MaxScroll(Object)
 		local Layout = Object:FindFirstChildOfClass("UIListLayout");
+		local Scale = ScaleOf(Object);
 
-		if Layout then
-			local Want = math.ceil(Layout.AbsoluteContentSize.Y + 1);
-
-			if Want > 1 and Object.CanvasSize.Y.Offset + 1 < Want then
-				Object.CanvasSize = UDim2.fromOffset(0, Want);
-			end;
+		if Scale <= 0 then
+			Scale = 1;
 		end;
 
-		local Scale = ScaleOf(Object);
+		-- Absolute* sizes carry the UIScale, canvas units do not. Divide it out so
+		-- the pane can reach its last row instead of stopping short.
 		local View = Object.AbsoluteSize.Y;
 		local Ok, WindowSize = pcall(function()
 			return Object.AbsoluteWindowSize;
@@ -985,17 +983,20 @@ function NeverLose:InstallTouchScroll()
 			View = WindowSize.Y;
 		end;
 
-		local Canvas = Object.AbsoluteCanvasSize.Y;
+		View = View / Scale;
+
+		local Canvas = Object.AbsoluteCanvasSize.Y / Scale;
 
 		if Layout then
-			local ScaledContent = (Layout.AbsoluteContentSize.Y + 1) * Scale;
+			local Need = (Layout.AbsoluteContentSize.Y + 1) / Scale;
 
-			if ScaledContent > Canvas then
-				Canvas = ScaledContent;
+			if Need > Canvas then
+				Canvas = math.ceil(Need);
+				Object.CanvasSize = UDim2.fromOffset(0, Canvas);
 			end;
 		end;
 
-		return math.max(0, (Canvas - View) / Scale);
+		return math.max(0, Canvas - View);
 	end;
 
 	local function Covered(Scroll, X, Y)
@@ -3759,7 +3760,7 @@ function NeverLose:RegisiterHandler(Handler: Frame , Signal)
 			UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
 			NeverLose:AddSignal(UIListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(LPH_NO_VIRTUALIZE(function()
-				DropdownScrollFrame.CanvasSize = UDim2.fromOffset(0,UIListLayout.AbsoluteContentSize.Y)
+				DropdownScrollFrame.CanvasSize = UDim2.fromOffset(0, math.ceil(UIListLayout.AbsoluteContentSize.Y / NeverLose:ScreenScale()))
 				NeverLose.PlayAnimate(DropdownHandler , SlowyTween , {
 					Size = UDim2.new(0, (Dropdown.AbsoluteSize.X + 5) + DropdownLib.ExtentSize, 0, math.min(UIListLayout.AbsoluteContentSize.Y + 5, 250));
 				})
@@ -5167,7 +5168,7 @@ function NeverLose:CreateWindow(Config)
 	UIListLayout.Padding = UDim.new(0, 5)
 
 	NeverLose:AddSignal(UIListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(LPH_NO_VIRTUALIZE(function()
-		LeftScrollingFrame.CanvasSize = UDim2.fromOffset(0,UIListLayout.AbsoluteContentSize.Y + 1)
+		LeftScrollingFrame.CanvasSize = UDim2.fromOffset(0, math.ceil(UIListLayout.AbsoluteContentSize.Y / NeverLose:ScreenScale()) + 1)
 	end)))
 
 	NeverLose:EnableTouchScroll(LeftScrollingFrame);
@@ -5737,7 +5738,7 @@ function NeverLose:CreateWindow(Config)
 		UIListLayout.Padding = UDim.new(0, 5)
 
 		NeverLose:AddSignal(UIListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(LPH_NO_VIRTUALIZE(function()
-			LeftScroll.CanvasSize = UDim2.fromOffset(0,UIListLayout.AbsoluteContentSize.Y + 1)
+			LeftScroll.CanvasSize = UDim2.fromOffset(0, math.ceil(UIListLayout.AbsoluteContentSize.Y / NeverLose:ScreenScale()) + 1)
 		end)))
 
 		RightScroll.Name = NeverLose.RandomString();
@@ -5767,7 +5768,7 @@ function NeverLose:CreateWindow(Config)
 		else
 			NeverLose:EnableTouchScroll(RightScroll);
 			NeverLose:AddSignal(UIListLayout_2:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(LPH_NO_VIRTUALIZE(function()
-				RightScroll.CanvasSize = UDim2.fromOffset(0,UIListLayout_2.AbsoluteContentSize.Y + 1)
+				RightScroll.CanvasSize = UDim2.fromOffset(0, math.ceil(UIListLayout_2.AbsoluteContentSize.Y / NeverLose:ScreenScale()) + 1)
 			end)))
 		end;
 
