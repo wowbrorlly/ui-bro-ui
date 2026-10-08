@@ -1,6 +1,6 @@
---!nocheck
--- Glu UI 3.0
--- Self contained interface library for Glu Hub. No external assets, every icon is drawn from frames.
+
+
+
 
 local cloneref = cloneref or function(x) return x end
 local TweenService = cloneref(game:GetService("TweenService"))
@@ -26,7 +26,7 @@ local FONT_M = Enum.Font.BuilderSansMedium
 local FONT_B = Enum.Font.BuilderSansBold
 local MONO = Enum.Font.RobotoMono
 
--- touch only devices (phones, tablets without a mouse) get larger targets
+
 local TOUCH = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 local K = {
 	Row = TOUCH and 46 or 36,
@@ -44,7 +44,7 @@ local K = {
 local RAIL_W, FOOTER_H, BAR_H = 70, 0, 56
 local SIDE_W, TOPBAR_H = 208, 58
 
----------------------------------------------------------------- theme
+
 local PRESETS = {
 	Glass = {
 		Accent = rgb(238, 238, 242), Window = rgb(10, 10, 12), Panel = rgb(18, 18, 21),
@@ -167,7 +167,7 @@ function UI:ChangeTheme(key, color)
 	applyTheme()
 end
 
----------------------------------------------------------------- helpers
+
 local Conns = {}
 local function conn(signal, fn)
 	local c = signal:Connect(fn)
@@ -262,7 +262,7 @@ local function topInset()
 	return ok and inset.Y or 36
 end
 
----------------------------------------------------------------- saved state
+
 local STATE_FILE = "GluUI/state.json"
 local State = { collapsed = {} }
 do
@@ -289,7 +289,7 @@ local function saveState()
 	end)
 end
 
----------------------------------------------------------------- icons
+
 local ICONS = {}
 local ICON_LIST = {}
 local function icon(parent, name, size, spec)
@@ -847,7 +847,7 @@ end
 UI.Icons = ICON_LIST
 function UI:Icon(parent, name, size, spec) return icon(parent, name, size or 18, spec or "Text") end
 
----------------------------------------------------------------- root gui
+
 local function pickParent()
 	local parent
 	pcall(function() if gethui then parent = gethui() end end)
@@ -891,7 +891,7 @@ local Catcher = new("TextButton", {
 	Size = UDim2.fromScale(1, 1), ZIndex = 1, BackgroundColor3 = rgb(0, 0, 0), BackgroundTransparency = 1,
 }, PopupLayer)
 
--- liquid glass finish: translucent body, bright rim that fades along a diagonal, a specular glint that sweeps across once
+
 local function glassify(frame, radius, sweep, plain)
 	radius = radius or 16
 	if not plain then frame.BackgroundTransparency = 0.1 end
@@ -974,7 +974,7 @@ local function placePopup(frame, anchor, width, height)
 	return width, height
 end
 
----------------------------------------------------------------- tooltip
+
 local Tip = { Frame = nil, Label = nil, Token = 0 }
 Tip.Frame = new("Frame", {
 	Name = "Tip", Visible = false, AutomaticSize = Enum.AutomaticSize.XY,
@@ -1045,7 +1045,7 @@ local function attachTip(obj, str)
 	end)
 end
 
----------------------------------------------------------------- key helpers
+
 local KEY_SHORT = {
 	LeftControl = "LCtrl", RightControl = "RCtrl", LeftShift = "LShift", RightShift = "RShift",
 	LeftAlt = "LAlt", RightAlt = "RAlt", MouseButton1 = "M1", MouseButton2 = "M2", MouseButton3 = "M3",
@@ -1076,7 +1076,7 @@ end
 local Keybinds = {}
 local Listening = nil
 
----------------------------------------------------------------- toasts
+
 local ToastList = {}
 local function placeToasts()
 	local compact = sheetMode()
@@ -1224,7 +1224,125 @@ function UI:Notification(cfg)
 	end)
 end
 
----------------------------------------------------------------- hud
+
+local DialogLayer = new("Frame", { Name = "Dialogs", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 8, Visible = false }, Gui)
+local DialogOpen = 0
+function UI:Dialog(cfg)
+	cfg = cfg or {}
+	local kindName = string.lower(tostring(cfg.Kind or "info"))
+	local kind = KIND[kindName] or KIND.info
+	local tint = kind.color
+	DialogOpen = DialogOpen + 1
+	DialogLayer.Visible = true
+	local dim = new("TextButton", {
+		Text = "", AutoButtonColor = false, BorderSizePixel = 0, Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = rgb(0, 0, 0), BackgroundTransparency = 1, ZIndex = 1,
+	}, DialogLayer)
+	tween(dim, { BackgroundTransparency = 0.4 }, 0.3)
+	local width = math.clamp(tonumber(cfg.Width) or 440, 280, math.max(280, Gui.AbsoluteSize.X - 28))
+	local panel = new("Frame", {
+		Name = "DialogPanel", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(width, 0), AutomaticSize = Enum.AutomaticSize.Y, BorderSizePixel = 0, ZIndex = 2,
+	}, DialogLayer)
+	themed(panel, { BackgroundColor3 = "Panel" })
+	corner(panel, 22)
+	stroke(panel, "Text", 1.2, 0.5)
+	local scale = new("UIScale", { Scale = 0.88 }, panel)
+	local content = new("Frame", {
+		BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y, Size = UDim2.new(1, 0, 0, 0),
+	}, panel)
+	pad(content, 24, 24, 24, 22)
+	vlist(content, 16)
+	local head = new("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 44), LayoutOrder = 1 }, content)
+	local badge = new("Frame", {
+		Position = UDim2.fromOffset(0, 0), Size = UDim2.fromOffset(44, 44), BorderSizePixel = 0, BackgroundTransparency = 0.8,
+	}, head)
+	if tint then badge.BackgroundColor3 = tint else themed(badge, { BackgroundColor3 = "Accent" }) end
+	corner(badge, 22)
+	local badgeStroke = stroke(badge, "Accent", 1.2, 0.5)
+	if tint then badgeStroke.Color = tint end
+	local bi = icon(badge, tostring(cfg.Icon or kind.icon), 22, "Accent")
+	bi.Frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	bi.Frame.Position = UDim2.fromScale(0.5, 0.5)
+	if tint then pcall(function() bi.SetColor(tint) end) end
+	text(head, tostring(cfg.Title or "Notice"), 18, "Text", FONT_B, {
+		Position = UDim2.fromOffset(58, 0), Size = UDim2.new(1, -58, 0, 24), TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	text(head, string.lower(tostring(cfg.Subtitle or kindName)), 11, "Muted", MONO, {
+		Position = UDim2.fromOffset(58, 26), Size = UDim2.new(1, -58, 0, 16),
+	})
+	if cfg.Body and tostring(cfg.Body) ~= "" then
+		text(content, tostring(cfg.Body), 13, "Muted", FONT, {
+			AutomaticSize = Enum.AutomaticSize.Y, Size = UDim2.new(1, 0, 0, 16), TextWrapped = true,
+			TextYAlignment = Enum.TextYAlignment.Top, LayoutOrder = 2, LineHeight = 1.25,
+		})
+	end
+	local buttons = cfg.Buttons
+	if type(buttons) ~= "table" or #buttons == 0 then buttons = { { Text = "ok", Style = "primary" } } end
+	local rowFrame = new("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 44), LayoutOrder = 3 }, content)
+	new("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10),
+	}, rowFrame)
+	local closed = false
+	local handle = {}
+	function handle:Close()
+		if closed then return end
+		closed = true
+		DialogOpen = math.max(0, DialogOpen - 1)
+		tween(dim, { BackgroundTransparency = 1 }, 0.2)
+		tween(scale, { Scale = 0.92 }, 0.2)
+		tween(panel, { Position = UDim2.new(0.5, 0, 0.5, 14) }, 0.2)
+		task.delay(0.22, function()
+			pcall(function() panel:Destroy() end)
+			pcall(function() dim:Destroy() end)
+			if DialogOpen == 0 then DialogLayer.Visible = false end
+		end)
+	end
+	local n = #buttons
+	for i, def in ipairs(buttons) do
+		local style = string.lower(tostring(def.Style or (i == 1 and "primary" or "plain")))
+		local b = new("TextButton", {
+			Text = "", AutoButtonColor = false, BorderSizePixel = 0, LayoutOrder = i,
+			Size = UDim2.new(1 / n, -((n - 1) * 10) / n, 1, 0),
+		}, rowFrame)
+		corner(b, 14)
+		local label
+		if style == "primary" then
+			themed(b, { BackgroundColor3 = "Accent" })
+			label = text(b, tostring(def.Text or "ok"), 13, "Window", FONT_B, { Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center })
+		elseif style == "danger" then
+			b.BackgroundColor3 = KIND.error.color
+			b.BackgroundTransparency = 0.12
+			label = text(b, tostring(def.Text or "ok"), 13, "Text", FONT_B, { Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center })
+			label.TextColor3 = rgb(255, 255, 255)
+		else
+			themed(b, { BackgroundColor3 = "Card" })
+			stroke(b, "Text", 1, 0.85)
+			label = text(b, tostring(def.Text or "ok"), 13, "Text", FONT_M, { Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center })
+		end
+		if not TOUCH then
+			b.MouseEnter:Connect(function() tween(b, { BackgroundTransparency = style == "plain" and 0.3 or 0.12 }, 0.12) end)
+			b.MouseLeave:Connect(function() tween(b, { BackgroundTransparency = style == "danger" and 0.12 or 0 }, 0.14) end)
+		end
+		b.Activated:Connect(function()
+			handle:Close()
+			if type(def.Callback) == "function" then task.spawn(safe, def.Callback) end
+		end)
+	end
+	glassify(panel, 22, true, true)
+	panel.BackgroundTransparency = 0.04
+	tween(scale, { Scale = 1 }, 0.42, Enum.EasingStyle.Back)
+	if cfg.Dismissable ~= false then
+		dim.Activated:Connect(function()
+			handle:Close()
+			if type(cfg.OnDismiss) == "function" then task.spawn(safe, cfg.OnDismiss) end
+		end)
+	end
+	handle.Panel = panel
+	return handle
+end
+
+
 local Fps = { Value = 60, Frames = 0, Stamp = os.clock() }
 conn(RunService.RenderStepped, function()
 	Fps.Frames = Fps.Frames + 1
@@ -1293,7 +1411,7 @@ function UI:SetWatermark(on)
 	Hud.Frame.Visible = true
 end
 
----------------------------------------------------------------- containers
+
 local Container = {}
 Container.__index = Container
 
@@ -2223,7 +2341,7 @@ function Container:IconGrid(names)
 	end
 end
 
----------------------------------------------------------------- input router
+
 conn(UserInputService.InputBegan, function(input)
 	if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Escape then
 		if Popup.Current then
@@ -2284,7 +2402,7 @@ conn(UserInputService.InputEnded, function(input)
 	end
 end)
 
----------------------------------------------------------------- window
+
 local Window = {}
 Window.__index = Window
 
@@ -2422,8 +2540,8 @@ function Window:_fitMax()
 end
 function Window:Divider() self.DividerSeen = true end
 
--- a toggle that is on but never had its callback run (on by default, or saved on in a config that matches the
--- default) looks enabled while its feature is not. this runs every such callback once, after the ui is built.
+
+
 function UI:Resync()
 	UI.Resyncing = true
 	for _, win in ipairs(Windows) do
@@ -2459,7 +2577,7 @@ local GROUP_OF = {
 local GROUP_ICON = { Farming = "sprout", Combat = "swords", World = "map", Misc = "grid", General = "home" }
 local GROUP_ORDER = { Farming = 1, Combat = 2, World = 3, Misc = 4, General = 5 }
 
--- sidebar group: a rounded block with a header and the pages that belong to it
+
 function Window:_group(name)
 	local g = self.Groups[name]
 	if g then return g end
@@ -2528,7 +2646,7 @@ end
 
 function Window:_layout()
 	local logicalW = self.Root.Size.X.Offset
-	local compact = logicalW < 640
+	local compact = logicalW < 720
 	local changed = compact ~= self.Compact
 	self.Compact = compact
 	local headH = compact and K.Header or TOPBAR_H
@@ -2566,7 +2684,7 @@ function Window:_layout()
 	else
 		self.SearchBox.Parent = self.Header
 		self.SearchBox.AnchorPoint = Vector2.new(1, 0.5)
-		local boxW = math.clamp(logicalW * 0.24, 150, 230)
+		local boxW = math.clamp(logicalW * 0.2, 130, 230)
 		self.SearchBox.Position = UDim2.new(1, -(10 + btnStep * 4 + 10), 0.5, 0)
 		self.SearchBaseW = boxW
 		self.SearchBox.Size = UDim2.fromOffset(boxW + (self.SearchFocused and 60 or 0), 34)
@@ -2623,7 +2741,7 @@ function Window:FocusSearch()
 	self.SearchInput:CaptureFocus()
 end
 
--- pills along the top: one per section of the open page, so a page with several sections can show just one
+
 function Window:_buildPills(page)
 	for _, c in ipairs(self.PillArea:GetChildren()) do
 		if c:IsA("TextButton") then c:Destroy() end
@@ -2950,7 +3068,7 @@ function UI:Window(cfg)
 		end },
 	})
 
-	-- sidebar
+
 	local rail = new("Frame", { Name = "Sidebar", BackgroundTransparency = 1, BorderSizePixel = 0 }, body)
 	win.Rail = rail
 	local railBg = new("Frame", { Position = UDim2.fromOffset(8, 8), Size = UDim2.new(1, -16, 1, -16), BorderSizePixel = 0, BackgroundTransparency = 0.25 }, rail)
@@ -2974,7 +3092,7 @@ function UI:Window(cfg)
 	}, rail)
 	new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 8) }, win.Nav)
 
-	-- profile card
+
 	local profile = new("Frame", {
 		Name = "Profile", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 10, 1, -10), Size = UDim2.new(1, -20, 0, 60),
 		BorderSizePixel = 0, BackgroundTransparency = 0.35,
@@ -3015,7 +3133,7 @@ function UI:Window(cfg)
 		end)
 	end)
 
-	-- top bar (also the compact header)
+
 	local header = new("Frame", { Name = "Header", Size = UDim2.new(1, -SIDE_W, 0, TOPBAR_H), Position = UDim2.fromOffset(SIDE_W, 0), BorderSizePixel = 0 }, body)
 	themed(header, { BackgroundColor3 = "Panel" })
 	header.BackgroundTransparency = 1
@@ -3096,6 +3214,8 @@ function UI:Window(cfg)
 			local w = win.SearchBox.Size.X.Offset
 			local base = win.SearchBaseW or w
 			tween(searchBox, { Size = UDim2.fromOffset(on and base + 60 or base, 34) }, 0.28, Enum.EasingStyle.Quint)
+			win.PillArea.Visible = (not on) and not win.Minimized
+			win.PageTitle.Visible = (not on) and (not win.HasPills) and win.PageTitle.Text ~= ""
 		end
 	end
 	searchInput.Focused:Connect(function() boxFocus(true) end)
@@ -3182,10 +3302,10 @@ function UI:Window(cfg)
 		if win.SearchOpen then searchInput:CaptureFocus() end
 	end, "search")
 
-	-- compact search row
+
 	win.SearchRow = new("Frame", { Name = "SearchRow", BackgroundTransparency = 1, Visible = false, Size = UDim2.new(1, 0, 0, 0), ClipsDescendants = true }, body)
 
-	-- drag from the top bar or the brand block (double tap or double click to maximize)
+
 	local drag, dragStart, dragOrigin
 	local lastTap = 0
 	local function startDrag(input)
@@ -3220,7 +3340,7 @@ function UI:Window(cfg)
 		end
 	end)
 
-	-- bottom bar (compact)
+
 	local bar = new("Frame", {
 		Name = "Bar", AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, BAR_H),
 		BorderSizePixel = 0, Visible = false,
@@ -3240,7 +3360,7 @@ function UI:Window(cfg)
 		HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center,
 	}, win.BarList)
 
-	-- content
+
 	local content = new("Frame", { Name = "Content", BackgroundTransparency = 1, ClipsDescendants = true }, body)
 	win.Content = content
 	local empty = new("Frame", { Name = "Empty", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Visible = false, ZIndex = 4 }, content)
@@ -3251,7 +3371,7 @@ function UI:Window(cfg)
 	text(empty, "try a shorter word", 12, "Muted", FONT, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 36), Size = UDim2.new(1, 0, 0, 16), TextXAlignment = Enum.TextXAlignment.Center })
 	win.EmptyLabel = empty
 
-	-- resize: right edge, bottom edge, corner grip
+
 	local function makeResizer(dxm, dym, props)
 		local h = new("TextButton", {
 			Text = "", AutoButtonColor = false, BackgroundTransparency = 1, ZIndex = 8,
@@ -3306,7 +3426,7 @@ function UI:Window(cfg)
 		end)
 	end)
 
-	-- live status
+
 	task.spawn(function()
 		while Gui.Parent do
 			if Hud.Frame and Hud.Frame.Visible then
@@ -3319,7 +3439,7 @@ function UI:Window(cfg)
 		end
 	end)
 
-	-- mobile menu button
+
 	if UserInputService.TouchEnabled and UI.MobileButton then
 		local mb = new("TextButton", {
 			Name = "MenuButton", Text = "", AutoButtonColor = false, Position = UDim2.new(0, 10, 0.5, -26),
