@@ -1493,7 +1493,7 @@ function Container:Toggle(cfg)
 		m.Frame.AnchorPoint = Vector2.new(0.5, 0.5)
 		m.Frame.Position = UDim2.fromScale(0.5, 0.5)
 	end
-	local ON_TRACK = { "Accent", function(c) return c:Lerp(UI.Theme.Window, 0.3) end }
+	local ON_TRACK = { "Accent", function(c) return c:Lerp(UI.Theme.Window, 0.1) end }
 	local function paint(animate)
 		local on = item.Value
 		local spec = on and ON_TRACK or "Line"
@@ -2829,8 +2829,9 @@ function Window:Page(cfg)
 		Name = "Tab_" .. name, Text = "", AutoButtonColor = false, BorderSizePixel = 0,
 		Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, LayoutOrder = #self.Pages + 1,
 	})
-	themed(btn, { BackgroundColor3 = "Text" })
+	themed(btn, { BackgroundColor3 = "Accent" })
 	corner(btn, 10)
+	local btnStroke = stroke(btn, "Accent", 1, 1)
 	btn.Parent = group.Items
 	page.Button = btn
 	page.Items.Inactive = { Instance = btn }
@@ -2843,7 +2844,7 @@ function Window:Page(cfg)
 		AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(6, 6),
 		BorderSizePixel = 0, Visible = false,
 	}, btn)
-	themed(dot, { BackgroundColor3 = "Text" })
+	themed(dot, { BackgroundColor3 = "Accent" })
 	corner(dot, 3)
 	local ic = icon(btn, iconName, 18, "Muted")
 	local cap = text(btn, name, K.Text, "Muted", FONT_M, { TextTruncate = Enum.TextTruncate.AtEnd })
@@ -2863,8 +2864,9 @@ function Window:Page(cfg)
 	function page:Paint()
 		local on = win.Active == page
 		local compact = win.Compact
-		tween(btn, { BackgroundTransparency = (on and not compact) and 0.84 or ((hover and not compact) and 0.93 or 1) }, 0.14)
-		ic.SetColor(on and "Text" or "Muted")
+		tween(btn, { BackgroundTransparency = (on and not compact) and 0.8 or ((hover and not compact) and 0.93 or 1) }, 0.14)
+		tween(btnStroke, { Transparency = (on and not compact) and 0.45 or 1 }, 0.14)
+		ic.SetColor(on and "Accent" or "Muted")
 		themed(cap, { TextColor3 = on and "Text" or "Muted" })
 		cap.TextTransparency = page.SearchDim and 0.6 or 0
 		dot.Visible = on and not compact
@@ -2958,9 +2960,9 @@ function Window:Page(cfg)
 		}, page.Cols[side])
 		themed(card, { BackgroundColor3 = "Card" })
 		corner(card, 16)
-		local cstroke = stroke(card, "Text", 1, 0.9)
+		local cstroke = stroke(card, "Accent", 1, 0.9)
 		if not TOUCH then
-			card.MouseEnter:Connect(function() tween(cstroke, { Transparency = 0.72 }, 0.18) end)
+			card.MouseEnter:Connect(function() tween(cstroke, { Transparency = 0.5 }, 0.18) end)
 			card.MouseLeave:Connect(function() tween(cstroke, { Transparency = 0.9 }, 0.22) end)
 		end
 		local cardGrad = new("UIGradient", { Rotation = 118 }, card)
@@ -2973,8 +2975,14 @@ function Window:Page(cfg)
 		local head = new("TextButton", {
 			Text = "", AutoButtonColor = false, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, K.Head), LayoutOrder = 1,
 		}, card)
+		local pip = new("Frame", {
+			AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.fromOffset(16, TOUCH and 17 or 16), Size = UDim2.fromOffset(5, 5),
+			BorderSizePixel = 0,
+		}, head)
+		themed(pip, { BackgroundColor3 = "Accent" })
+		corner(pip, 3)
 		text(head, title, 14, "Text", FONT_B, {
-			Position = UDim2.fromOffset(16, TOUCH and 9 or 8), Size = UDim2.new(1, -60, 0, 18), TextTruncate = Enum.TextTruncate.AtEnd,
+			Position = UDim2.fromOffset(28, TOUCH and 9 or 8), Size = UDim2.new(1, -72, 0, 18), TextTruncate = Enum.TextTruncate.AtEnd,
 		})
 		local sub = text(head, "", 11, "Muted", FONT, {
 			Position = UDim2.fromOffset(16, TOUCH and 29 or 27), Size = UDim2.new(1, -60, 0, 14), TextTruncate = Enum.TextTruncate.AtEnd,
@@ -3075,7 +3083,8 @@ function UI:Window(cfg)
 	local bg = new("Frame", { Name = "Bg", Size = UDim2.fromScale(1, 1), BorderSizePixel = 0 }, body)
 	themed(bg, { BackgroundColor3 = "Window" })
 	corner(bg, 18)
-	stroke(bg, "Text", 1.2, 0.55)
+	local rim = stroke(bg, "Accent", 1.4, 0.45)
+	TweenService:Create(rim, TweenInfo.new(2.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Transparency = 0.72 }):Play()
 	local bgGrad = new("UIGradient", { Rotation = 128 }, bg)
 	themed(bgGrad, {
 		Color = { "Window", function(c)
