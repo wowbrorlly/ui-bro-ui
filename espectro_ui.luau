@@ -3512,6 +3512,10 @@ function UI:Window(cfg)
 	win.Veil = veil
 	bg.BackgroundTransparency = 0.04
 	glassify(bg, 18, true, true)
+	-- glassify() hardcodes every UIStroke it touches back to a plain "Text" rim; put the
+	-- accent-colored breathing glow back since this frame's rim is the window's signature look
+	rim.Thickness = 1.4
+	themed(rim, { Color = "Accent" })
 	local p0 = root.Position
 	root.Position = p0 + UDim2.fromOffset(0, 18)
 	tween(veil, { BackgroundTransparency = 1 }, 0.5, Enum.EasingStyle.Quint)
