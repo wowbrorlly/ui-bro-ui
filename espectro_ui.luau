@@ -292,7 +292,22 @@ end
 
 local ICONS = {}
 local ICON_LIST = {}
+local LOGO_ASSET = "rbxassetid://117534853178551"
 local function icon(parent, name, size, spec)
+	if name == "logo" then
+		local holder = new("Frame", {
+			Name = "Icon_logo", BackgroundTransparency = 1,
+			Size = UDim2.fromOffset(size, size), BorderSizePixel = 0,
+		})
+		local img = new("ImageLabel", {
+			BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1),
+			Image = LOGO_ASSET, ScaleType = Enum.ScaleType.Fit,
+		}, holder)
+		local obj = { Frame = holder, Image = img }
+		function obj.SetColor(_) end
+		if parent then holder.Parent = parent end
+		return obj
+	end
 	local def = ICONS[name] or ICONS.dot
 	local s = size / 24
 	local th = math.max(1.4, 1.85 * s)
